@@ -1,0 +1,23 @@
+services:
+  wildbot:
+    build:
+      context: .
+    environment:
+      - DB_HOST=postgresql
+      - DB_NAME=db_name
+      - DB_USER=db_user
+      - DB_PASS=db_pass
+    volumes:
+      - ./:/backend
+    command: >
+       sh -c "python main.py"
+    depends_on:
+      - postgresql
+
+  postgresql:
+    image: postgres:14.6-alpine
+    environment:
+      - POSTGRES_DB=db_name
+      - POSTGRES_USER=db_user
+      - POSTGRES_PASSWORD=db_pass
+      - POSTGRES_AUTH_HOST_METHOD=trust
