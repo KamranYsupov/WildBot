@@ -4,16 +4,17 @@ reply_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
             KeyboardButton(
-                text='Получить информацию по товару'
-            ),
-
-            KeyboardButton(
-                text='Получить информацию из БД'
+                text='Получить информацию по товару 📑'
             ),
         ],
         [
             KeyboardButton(
-                text='Остановить уведомления'
+                text='Получить информацию из БД 🗄️'
+            ),
+        ],
+        [
+            KeyboardButton(
+                text='Остановить уведомления 🔔'
             ),
         ]
     ],
@@ -25,7 +26,7 @@ reply_cancel_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [
             KeyboardButton(
-                text='Отмена'
+                text='Отмена ❌'
             ),
         ],
     ],

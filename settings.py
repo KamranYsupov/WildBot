@@ -1,6 +1,6 @@
 from aiogram.types import BotCommand
 
-TOKEN = '<your_token>'
+TOKEN = '<your token>'
 
 WB_API_URL = 'https://card.wb.ru/cards/v1/detail?appType=1&curr=rub&dest=-1257786&spp=30&nm='
 
@@ -10,4 +10,4 @@ COMMANDS_LIST = [
     BotCommand(command='get_history', description='Получить информацию из БД'),
 ]
 
-TIME_INTERVAL = 300
+TIME_INTERVAL = 300  # 5 minutes

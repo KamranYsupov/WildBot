@@ -37,7 +37,7 @@ class Product(Base):
     rating = Column(Float)
     feedbacks = Column(Integer, default=0)
     total_amount = Column(Integer)
-    time_create = Column(String, default=datetime.datetime.now())
+    time_create = Column(String, default=str(datetime.datetime.now()))
 
 
 Product.subscribers = relationship(

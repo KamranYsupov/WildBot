@@ -18,17 +18,16 @@ class NotificationState(StatesGroup):
 
 async def get_product_info(product):
     return str(
-        'Название: ' + '"' + str(product.name) + '"' + '\n'
-        + '\n'
-          'Артикул: ' + str(product.vendor_code) + '\n'
-        + '\n'
-          'Цена: ' + str(product.price) + 'rub' + '\n'
-        + '\n'
-          'Рейтинг товара: ' + str(product.rating) + '('
-        + str(product.feedbacks) + ' оценок)' + '\n'
-        + '\n'
-          'Количество на складе: ' + str(product.total_amount)
-        + '\n'
+            '<b>Название: </b>' + '"' + str(product.name) + '"' + '\n'
+            + '\n'
+              '<b>Артикул: </b>' + str(product.vendor_code) + '\n'
+            + '\n'
+              '<b>Цена: </b>' + str(product.price) + '<b>' + 'rub' + '</b>' + '\n'
+            + '\n'
+              '<b>Рейтинг товара: </b>' + str(product.rating) + '('
+            + '<b>' + str(product.feedbacks) + ' оценок)' + '</b>' + '\n'
+            + '\n'
+              '<b>Количество на складе: </b>' + str(product.total_amount)
     )
 
 
@@ -58,7 +57,7 @@ async def send_notifications(callback: CallbackQuery, product: Product, state: F
             if notifications_enabled['notifications_enabled']:
                 print(notifications_enabled['notifications_enabled'])
                 answer = await get_product_info(product)
-                await callback.message.answer(answer)
+                await callback.message.answer(answer, parse_mode='HTML')
                 await asyncio.sleep(TIME_INTERVAL)
             else:
                 await state.clear()

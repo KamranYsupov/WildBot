@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from aiogram import types
 from db.models import User, Product
 from keyboards.reply import reply_keyboard, reply_keyboard_delete, reply_cancel_keyboard
 from keyboards.inline import get_inline_keyboard
@@ -41,7 +41,7 @@ async def start_command_handler(message: types.Message, bot: Bot, session: Async
 
 
 @basic_router.message(
-    or_f(Command('get_product_info'), (F.text == 'Получить информацию по товару'))
+    or_f(Command('get_product_info'), (F.text.lower() == 'получить информацию по товару 📑'))
 )
 async def product_info_command_handler(message: types.Message, state: FSMContext):
     await message.answer('Отправьте артикул товара с вб', reply_markup=reply_cancel_keyboard)
@@ -50,7 +50,7 @@ async def product_info_command_handler(message: types.Message, state: FSMContext
 
 
 @basic_router.message(StateFilter('*'), Command('отмена'))
-@basic_router.message(StateFilter('*'), F.text.lower() == 'отмена')
+@basic_router.message(StateFilter('*'), F.text.lower() == 'отмена ❌')
 async def cancel_get_info_product_handler(message: types.Message, state: FSMContext):
     if await state.get_state() is None:
         return None
@@ -106,22 +106,23 @@ async def send_product_info(message: types.Message, state: FSMContext, session: 
             pass
 
         await message.answer(
-            'Название: ' + '"' + str(product_name) + '"' + '\n'
+            '<b>Название: </b>' + '"' + str(product_name) + '"' + '\n'
             + '\n'
-              'Артикул: ' + str(product_vendor_code) + '\n'
+              '<b>Артикул: </b>' + str(product_vendor_code) + '\n'
             + '\n'
-              'Цена: ' + str(product_price) + 'rub' + '\n'
+              '<b>Цена: </b>' + str(product_price) + '<b>' + 'rub' + '</b>' + '\n'
             + '\n'
-              'Рейтинг товара: ' + str(product_rating) + '('
-            + str(product_feedbacks) + ' оценок)' + '\n'
+              '<b>Рейтинг товара: </b>' + str(product_rating) + '('
+            + '<b>' + str(product_feedbacks) + ' оценок)' + '</b>' + '\n'
             + '\n'
-              'Количество на складе: ' + str(product_amount),
+              '<b>Количество на складе: </b>' + str(product_amount),
             reply_markup=get_inline_keyboard(
                 buttons={
                     'Подписаться': f'subscribe_{product_vendor_code}_{username}'
                 },
                 sizes=(2, 2)
-            )
+            ),
+            parse_mode='HTML'
         )
 
         await save_notifications_clear_state(state)
@@ -132,7 +133,7 @@ async def send_product_info(message: types.Message, state: FSMContext, session: 
         )
 
 
-@basic_router.message(or_f(Command('get_history'), F.text == 'Получить информацию из БД'))
+@basic_router.message(or_f(Command('get_history'), F.text.lower() == 'получить информацию из бд 🗄️'))
 async def get_last_5_products(message: types.Message, session: AsyncSession):
     user_query = select(User).where(User.username == message.from_user.username)
     user_result = await session.execute(user_query)
@@ -149,13 +150,13 @@ async def get_last_5_products(message: types.Message, session: AsyncSession):
                 break
             answer += await get_product_info(product)
             if product != products[-1]:
-                answer += '_______________________________________________________________\n\n'
+                answer += '\n________________________________________\n\n'
             counter += 1
 
     else:
         answer += 'В базе данных нет ни одной записи'
 
-    await message.answer(answer, reply_markup=reply_keyboard)
+    await message.answer(answer, reply_markup=reply_keyboard, parse_mode='HTML')
 
 
 @basic_router.callback_query(F.data.startswith('subscribe_'))
@@ -171,20 +172,16 @@ async def subscribe_to_product(callback: types.CallbackQuery, state: FSMContext,
 
 @basic_router.message(or_f(
     Command('stop_notifications'),
-    F.text == 'Остановить уведомления')
+    F.text == 'Остановить уведомления 🔔')
 )
 async def stop_notifications_handler(message: types.Message, state: FSMContext):
     await state.update_data(notifications_enabled=False)
     data = await state.get_data()
     print(data)
 
-    await message.answer('Уведомления успешно остановлены!')
+    await message.answer('Уведомления успешно остановлены!', reply_markup=reply_keyboard)
 
 
 @basic_router.message(F)
 async def exception_handler(message: types.Message):
     await message.answer('Выберите действие')
-
-
-
-
