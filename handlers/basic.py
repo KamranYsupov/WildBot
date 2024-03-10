@@ -1,9 +1,11 @@
 import asyncio
+import sqlite3
 import time
 from pprint import pprint
 from sqlite3 import IntegrityError
 
 import requests
+import sqlalchemy
 from aiogram import types, Bot, Router, F
 from aiogram.filters import CommandStart, Command, or_f, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -15,18 +17,9 @@ from db.models import User, Product
 from keyboards.reply import reply_keyboard, reply_keyboard_delete, reply_cancel_keyboard
 from keyboards.inline import get_inline_keyboard
 from settings import WB_API_URL
+from .state import ProductState, NotificationState, save_notifications_clear_state, send_notifications, get_product_info
 
 basic_router = Router()
-
-is_notifications_on = True
-
-
-class ProductState(StatesGroup):
-    vendor_code = State()
-
-
-class NotificationState(StatesGroup):
-    notifications_enabled = State()
 
 
 @basic_router.message(CommandStart())
@@ -38,9 +31,7 @@ async def start_command_handler(message: types.Message, bot: Bot, session: Async
         reply_markup=reply_keyboard
     )
     try:
-        user = User(
-            username=message.from_user.username
-        )
+        user = User(username=message.from_user.username)
 
         session.add(user)
 
@@ -50,7 +41,6 @@ async def start_command_handler(message: types.Message, bot: Bot, session: Async
 
 
 @basic_router.message(
-    StateFilter(None),
     or_f(Command('get_product_info'), (F.text == 'Получить информацию по товару'))
 )
 async def product_info_command_handler(message: types.Message, state: FSMContext):
@@ -65,12 +55,13 @@ async def cancel_get_info_product_handler(message: types.Message, state: FSMCont
     if await state.get_state() is None:
         return None
 
-    await state.clear()
+    await save_notifications_clear_state(state)
+
     await message.answer('Действие отменено', reply_markup=reply_keyboard)
 
 
-@basic_router.message(ProductState.vendor_code, F.text)
-async def get_product_info(message: types.Message, state: FSMContext, session: AsyncSession):
+@basic_router.message(ProductState.vendor_code)
+async def send_product_info(message: types.Message, state: FSMContext, session: AsyncSession):
     username = message.from_user.username
     vendor_code = None
     try:
@@ -132,7 +123,8 @@ async def get_product_info(message: types.Message, state: FSMContext, session: A
                 sizes=(2, 2)
             )
         )
-        await state.clear()
+
+        await save_notifications_clear_state(state)
     except IndexError:
         await message.answer(
             'Товара с таким артиклом не существует',
@@ -146,31 +138,24 @@ async def get_last_5_products(message: types.Message, session: AsyncSession):
     user_result = await session.execute(user_query)
     user = user_result.scalar()
 
-    query = select(Product)
-    result = await session.execute(query)
-    products = result.scalars().all()
-    reply = ''
+    product_query = select(Product)
+    product_result = await session.execute(product_query)
+    products = product_result.scalars().all()
+    answer = ''
+    counter = 0
     if len(products) != 0:
-        for product in products[-5:0]:
-            reply += (
-                    'Название: ' + '"' + str(product.name) + '"' + '\n'
-                    + '\n'
-                      'Артикул: ' + str(product.vendor_code) + '\n'
-                    + '\n'
-                      'Цена: ' + str(product.price) + 'rub' + '\n'
-                    + '\n'
-                      'Рейтинг товара: ' + str(product.rating) + '('
-                    + str(product.feedbacks) + ' оценок)' + '\n'
-                    + '\n'
-                      'Количество на складе: ' + str(product.total_amount)
-                    + '\n'
-            )
+        for product in products:
+            if counter > 5:
+                break
+            answer += await get_product_info(product)
             if product != products[-1]:
-                reply += '_______________________________________________________________\n\n'
-    else:
-        reply = 'В базе данных нет ни одной записи'
+                answer += '_______________________________________________________________\n\n'
+            counter += 1
 
-    await message.answer(reply, reply_markup=reply_keyboard)
+    else:
+        answer += 'В базе данных нет ни одной записи'
+
+    await message.answer(answer, reply_markup=reply_keyboard)
 
 
 @basic_router.callback_query(F.data.startswith('subscribe_'))
@@ -181,62 +166,25 @@ async def subscribe_to_product(callback: types.CallbackQuery, state: FSMContext,
     product_result = await session.execute(product_query)
     product = product_result.scalar()
 
-    user_query = select(User).where(User.username == str(callback_data[-1]))
-    user_result = await session.execute(user_query)
-    user = user_result.scalar()
-
-    if user not in product.subscribers:
-        product.subscribers.append(user)
-        await session.commit()
-
-    print(product.subscribers)
-    await state.set_state(NotificationState.notifications_enabled)
-
-    while True:
-        notifications_enabled = await state.get_state() == NotificationState.notifications_enabled.state
-        if notifications_enabled and user in product.subscribers:
-            await asyncio.sleep(10)
-            await callback.message.answer(
-                'Название: ' + '"' + str(product.name) + '"' + '\n'
-                + '\n'
-                  'Артикул: ' + str(product.vendor_code) + '\n'
-                + '\n'
-                  'Цена: ' + str(product.price) + 'rub' + '\n'
-                + '\n'
-                  'Рейтинг товара: ' + str(product.rating) + '('
-                + str(product.feedbacks) + ' оценок)' + '\n'
-                + '\n'
-                  'Количество на складе: ' + str(product.total_amount)
-                + '\n')
-        else:
-            break
+    await send_notifications(callback, product, state)
 
 
 @basic_router.message(or_f(
     Command('stop_notifications'),
     F.text == 'Остановить уведомления')
 )
-async def stop_notifications_handler(message: types.Message, state: FSMContext, session: AsyncSession):
+async def stop_notifications_handler(message: types.Message, state: FSMContext):
     await state.update_data(notifications_enabled=False)
+    data = await state.get_data()
+    print(data)
 
-    user_query = select(User).where(User.username == message.from_user.username)
-    user_result = await session.execute(user_query)
-    user = user_result.scalar()
-
-    product_query = select(Product)
-    product_result = await session.execute(product_query)
-    products = product_result.scalars().all()
-    for product in products:
-        try:
-            product.subscribers.remove(user)
-            await session.commit()
-        except ValueError:
-            pass
-    await state.clear()
     await message.answer('Уведомления успешно остановлены!')
-
 
 
 @basic_router.message(F)
 async def exception_handler(message: types.Message):
     await message.answer('Выберите действие')
+
+
+
+
