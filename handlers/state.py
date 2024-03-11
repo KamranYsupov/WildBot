@@ -1,11 +1,14 @@
 import asyncio
 
+import requests
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery
 
 from db.models import Product
 from settings import TIME_INTERVAL
+
+from settings import WB_API_URL
 
 
 class ProductState(StatesGroup):
@@ -16,18 +19,39 @@ class NotificationState(StatesGroup):
     notifications_enabled = State()
 
 
-async def get_product_info(product):
-    return str(
-            '<b>Название: </b>' + '"' + str(product.name) + '"' + '\n'
-            + '\n'
-              '<b>Артикул: </b>' + str(product.vendor_code) + '\n'
-            + '\n'
-              '<b>Цена: </b>' + str(product.price) + '<b>' + 'rub' + '</b>' + '\n'
-            + '\n'
-              '<b>Рейтинг товара: </b>' + str(product.rating) + '('
-            + '<b>' + str(product.feedbacks) + ' оценок)' + '</b>' + '\n'
-            + '\n'
-              '<b>Количество на складе: </b>' + str(product.total_amount)
+async def get_product_message_by_object(obj: Product) -> str:
+    return (
+        f'<b>Название: </b>"{obj.name}"\n \n'
+        f'<b>Артикул: </b> {obj.vendor_code}\n\n'
+        f'<b>Цена: </b>{obj.price}<b>rub</b>\n\n'
+        f'<b>Рейтинг товара: </b>{obj.rating}(<b>{obj.feedbacks} оценок)</b>\n\n'
+        f'<b>Количество на складе: </b>{obj.total_amount}'
+    )
+
+
+async def get_product_message_by_data(product_data: dict) -> str:
+    name = product_data['name']
+    vendor_code = product_data['vendor_code']
+    price = product_data['price']
+    rating = product_data['name']
+    feedbacks = product_data['name']
+    total_amount = product_data['name']
+    return (
+        f'<b>Название: </b>"{name}"\n \n'
+        f'<b>Артикул: </b> {vendor_code}\n\n'
+        f'<b>Цена: </b>{price}<b>rub</b>\n\n'
+        f'<b>Рейтинг товара: </b>{rating}(<b>{feedbacks} оценок)</b>\n\n'
+        f'<b>Количество на складе: </b>{total_amount}'
+    )
+
+
+async def get_product_message_object(product: Product) -> str:
+    return (
+        f'<b>Название: </b>"{product.name}"\n \n'
+        f'<b>Артикул: </b> {product.vendor_code}\n\n'
+        f'<b>Цена: </b>{product.price}<b>rub</b>\n\n'
+        f'<b>Рейтинг товара: </b>{product.rating}(<b>{product.feedbacks} оценок)</b>\n\n'
+        f'<b>Количество на складе: </b>{product.total_amount}'
     )
 
 
@@ -55,8 +79,7 @@ async def send_notifications(callback: CallbackQuery, product: Product, state: F
         notifications_enabled = await state.get_data()
         try:
             if notifications_enabled['notifications_enabled']:
-                print(notifications_enabled['notifications_enabled'])
-                answer = await get_product_info(product)
+                answer = await get_product_message_object(product)
                 await callback.message.answer(answer, parse_mode='HTML')
                 await asyncio.sleep(TIME_INTERVAL)
             else:
@@ -65,3 +88,24 @@ async def send_notifications(callback: CallbackQuery, product: Product, state: F
         except KeyError:
             await state.clear()
             break
+
+
+def get_product_info_from_api(api_url: str) -> dict:
+    response = requests.get(api_url)
+
+    product_json = response.json()['data']['products'][0]
+
+    product_info = dict()
+    product_info['name'] = product_json.get('name', 'Не найдено')
+    product_info['vendor_code'] = product_json.get('id', 'Не найдено')
+    product_info['price'] = float(product_json.get('salePriceU') / 100)
+    product_info['rating'] = float(product_json.get('reviewRating', 'Не найдено'))
+    product_info['feedbacks'] = product_json.get('feedbacks', 'Не найдено')
+
+    product_amount = 0
+    for i in product_json['sizes'][0]['stocks']:
+        product_amount += int(i['qty'])
+
+    product_info['amount'] = product_amount
+
+    return product_info

@@ -11,13 +11,29 @@ from aiogram.filters import CommandStart, Command, or_f, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram import types
+
 from db.models import User, Product
 from keyboards.reply import reply_keyboard, reply_keyboard_delete, reply_cancel_keyboard
 from keyboards.inline import get_inline_keyboard
 from settings import WB_API_URL
-from .state import ProductState, NotificationState, save_notifications_clear_state, send_notifications, get_product_info
+from .state import (
+    ProductState,
+    NotificationState,
+    save_notifications_clear_state,
+    send_notifications,
+    get_product_message_by_object,
+    get_product_message_by_data, get_product_info_from_api
+)
+
+from db.orm_queries import (
+    orm_get_product_by_vendor_code,
+    orm_get_all_objects,
+    orm_create_product,
+    orm_create_user,
+)
 
 basic_router = Router()
 
@@ -30,14 +46,9 @@ async def start_command_handler(message: types.Message, bot: Bot, session: Async
         'о товарах на таком маркетплейсе как Wildberries',
         reply_markup=reply_keyboard
     )
-    try:
-        user = User(username=message.from_user.username)
+    username = message.from_user.username
 
-        session.add(user)
-
-        await session.commit()
-    except Exception:
-        pass
+    await orm_create_user(username, session)
 
 
 @basic_router.message(
@@ -63,7 +74,6 @@ async def cancel_get_info_product_handler(message: types.Message, state: FSMCont
 @basic_router.message(ProductState.vendor_code)
 async def send_product_info(message: types.Message, state: FSMContext, session: AsyncSession):
     username = message.from_user.username
-    vendor_code = None
     try:
         vendor_code = int(message.text)
     except ValueError:
@@ -71,59 +81,30 @@ async def send_product_info(message: types.Message, state: FSMContext, session: 
         return None
 
     await message.answer('Подождите секунду...', reply_markup=reply_keyboard)
-    response = requests.get(WB_API_URL + str(vendor_code))
     try:
-        products_json = response.json()['data']['products'][0]
+        api_url = WB_API_URL + str(vendor_code)
+        product_info = get_product_info_from_api(api_url)
 
-        # pprint(products_json)
-
-        product_name = products_json.get('name', 'Не найдено')
-        product_vendor_code = products_json.get('id', 'Не найдено')
-        product_price = float(products_json.get('salePriceU') / 100)
-        product_rating = float(products_json.get('reviewRating', 'Не найдено'))
-        product_feedbacks = products_json.get('feedbacks', 'Не найдено')
-
-        product_amount = 0
-        for i in products_json['sizes'][0]['stocks']:
-            product_amount += int(i['qty'])
+        await orm_create_product(
+            name=product_info['name'],
+            vendor_code=product_info['vendor_code'],
+            price=product_info['vendor_code'],
+            rating=product_info['vendor_code'],
+            feedbacks=product_info['vendor_code'],
+            total_amount=product_info['vendor_code'],
+            session=session
+        )
 
         await state.update_data(vendor_code=message.text)
 
-        try:
-            obj = Product(
-                name=product_name,
-                vendor_code=product_vendor_code,
-                price=product_price,
-                rating=product_rating,
-                feedbacks=product_feedbacks,
-                total_amount=product_amount,
-            )
-            session.add(obj)
-
-            await session.commit()
-
-        except Exception:
-            pass
-
-        await message.answer(
-            '<b>Название: </b>' + '"' + str(product_name) + '"' + '\n'
-            + '\n'
-              '<b>Артикул: </b>' + str(product_vendor_code) + '\n'
-            + '\n'
-              '<b>Цена: </b>' + str(product_price) + '<b>' + 'rub' + '</b>' + '\n'
-            + '\n'
-              '<b>Рейтинг товара: </b>' + str(product_rating) + '('
-            + '<b>' + str(product_feedbacks) + ' оценок)' + '</b>' + '\n'
-            + '\n'
-              '<b>Количество на складе: </b>' + str(product_amount),
-            reply_markup=get_inline_keyboard(
-                buttons={
-                    'Подписаться': f'subscribe_{product_vendor_code}_{username}'
-                },
-                sizes=(2, 2)
-            ),
-            parse_mode='HTML'
-        )
+        answer = await get_product_message_by_data(product_info)
+        await message.answer(str(answer), reply_markup=get_inline_keyboard(
+            buttons={
+                'Подписаться': f'subscribe_{vendor_code}_{username}'
+            },
+            sizes=(2, 2)
+        ), parse_mode='HTML'
+                             )
 
         await save_notifications_clear_state(state)
     except IndexError:
@@ -135,20 +116,15 @@ async def send_product_info(message: types.Message, state: FSMContext, session: 
 
 @basic_router.message(or_f(Command('get_history'), F.text.lower() == 'получить информацию из бд 🗄️'))
 async def get_last_5_products(message: types.Message, session: AsyncSession):
-    user_query = select(User).where(User.username == message.from_user.username)
-    user_result = await session.execute(user_query)
-    user = user_result.scalar()
+    products = await orm_get_all_objects(Product, session)
 
-    product_query = select(Product)
-    product_result = await session.execute(product_query)
-    products = product_result.scalars().all()
     answer = ''
     counter = 0
     if len(products) != 0:
         for product in products:
             if counter > 5:
                 break
-            answer += await get_product_info(product)
+            answer += await get_product_message_by_object(product)
             if product != products[-1]:
                 answer += '\n________________________________________\n\n'
             counter += 1
@@ -163,9 +139,8 @@ async def get_last_5_products(message: types.Message, session: AsyncSession):
 async def subscribe_to_product(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
     callback_data = callback.data.split('_')
 
-    product_query = select(Product).where(Product.vendor_code == int(callback_data[-2]))
-    product_result = await session.execute(product_query)
-    product = product_result.scalar()
+    vendor_code = int(callback_data[-2])
+    product = await orm_get_product_by_vendor_code(vendor_code, session)
 
     await send_notifications(callback, product, state)
 
@@ -176,8 +151,6 @@ async def subscribe_to_product(callback: types.CallbackQuery, state: FSMContext,
 )
 async def stop_notifications_handler(message: types.Message, state: FSMContext):
     await state.update_data(notifications_enabled=False)
-    data = await state.get_data()
-    print(data)
 
     await message.answer('Уведомления успешно остановлены!', reply_markup=reply_keyboard)
 

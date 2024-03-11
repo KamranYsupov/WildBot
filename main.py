@@ -5,7 +5,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 
 from db.engine import create_db, drop_db, session_maker
-from handlers.basic import get_product_info, start_command_handler, basic_router
+from handlers.basic import start_command_handler, basic_router
 from settings import TOKEN, COMMANDS_LIST
 from middlewares.db import DataBaseSession
 

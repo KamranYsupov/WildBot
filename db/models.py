@@ -7,24 +7,11 @@ from sqlalchemy.orm import declarative_base, relationship
 Base = declarative_base()
 
 
-subscription_table = Table(
-    'user_subscriptions', Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id')),
-    Column('product_id', Integer, ForeignKey('products.id'))
-)
-
-
 class User(Base):
     __tablename__ = 'users'
 
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True)
-    subscriptions = relationship(
-        'Product',
-        secondary=subscription_table,
-        back_populates='subscribers',
-        lazy='selectin',
-    )
 
 
 class Product(Base):
@@ -40,11 +27,5 @@ class Product(Base):
     time_create = Column(String, default=str(datetime.datetime.now()))
 
 
-Product.subscribers = relationship(
-    'User',
-    secondary=subscription_table,
-    back_populates='subscriptions',
-    lazy='selectin',
-)
 
 

@@ -7,7 +7,7 @@ from db.models import Base
 # SQLite
 # engine = create_async_engine('sqlite+aiosqlite:///database.db', echo=True)
 
-# POSTGRESQL
+# # POSTGRESQL
 engine = create_async_engine(
     'postgresql+asyncpg://'
     + str(os.environ.get('DB_USER'))
