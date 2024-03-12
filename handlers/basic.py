@@ -83,15 +83,15 @@ async def send_product_info(message: types.Message, state: FSMContext, session: 
     await message.answer('Подождите секунду...', reply_markup=reply_keyboard)
     try:
         api_url = WB_API_URL + str(vendor_code)
-        product_info = get_product_info_from_api(api_url)
+        product_info = await get_product_info_from_api(api_url)
 
         await orm_create_product(
             name=product_info['name'],
             vendor_code=product_info['vendor_code'],
-            price=product_info['vendor_code'],
-            rating=product_info['vendor_code'],
-            feedbacks=product_info['vendor_code'],
-            total_amount=product_info['vendor_code'],
+            price=product_info['price'],
+            rating=product_info['rating'],
+            feedbacks=product_info['feedbacks'],
+            total_amount=product_info['total_amount'],
             session=session
         )
 

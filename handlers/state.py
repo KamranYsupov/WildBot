@@ -1,6 +1,6 @@
 import asyncio
 
-import requests
+import aiohttp
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import CallbackQuery
@@ -33,9 +33,9 @@ async def get_product_message_by_data(product_data: dict) -> str:
     name = product_data['name']
     vendor_code = product_data['vendor_code']
     price = product_data['price']
-    rating = product_data['name']
-    feedbacks = product_data['name']
-    total_amount = product_data['name']
+    rating = product_data['rating']
+    feedbacks = product_data['feedbacks']
+    total_amount = product_data['total_amount']
     return (
         f'<b>Название: </b>"{name}"\n \n'
         f'<b>Артикул: </b> {vendor_code}\n\n'
@@ -90,22 +90,26 @@ async def send_notifications(callback: CallbackQuery, product: Product, state: F
             break
 
 
-def get_product_info_from_api(api_url: str) -> dict:
-    response = requests.get(api_url)
+async def get_product_info_from_api(api_url: str) -> dict:
+    async with aiohttp.ClientSession() as session:
+        response = await session.get(api_url)
 
-    product_json = response.json()['data']['products'][0]
+        data = await response.json()
 
-    product_info = dict()
-    product_info['name'] = product_json.get('name', 'Не найдено')
-    product_info['vendor_code'] = product_json.get('id', 'Не найдено')
-    product_info['price'] = float(product_json.get('salePriceU') / 100)
-    product_info['rating'] = float(product_json.get('reviewRating', 'Не найдено'))
-    product_info['feedbacks'] = product_json.get('feedbacks', 'Не найдено')
+        product_json = data['data']['products'][0]
 
-    product_amount = 0
-    for i in product_json['sizes'][0]['stocks']:
-        product_amount += int(i['qty'])
+        product_info = dict()
+        product_info['name'] = product_json.get('name', 'Не найдено')
+        product_info['vendor_code'] = product_json.get('id', 'Не найдено')
+        product_info['price'] = float(product_json.get('salePriceU') / 100)
+        product_info['rating'] = float(product_json.get('reviewRating', 'Не найдено'))
+        product_info['feedbacks'] = product_json.get('feedbacks', 'Не найдено')
 
-    product_info['amount'] = product_amount
+        product_amount = 0
+
+        for i in product_json['sizes'][0]['stocks']:
+            product_amount += int(i['qty'])
+
+        product_info['total_amount'] = product_amount
 
     return product_info
