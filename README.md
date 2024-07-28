@@ -20,7 +20,7 @@
 <h2>После</h2>
 <img src="pictures-for_README/code_refactor/send_product_info_answer_after.png">
 
-<h2>Уточнение типи исключения SQLAlchemyError, в блоках try и except</h2>
+<h2>Уточнение типа исключения SQLAlchemyError, в блоках try и except</h2>
 
 <h2>До</h2>
 <img src="pictures-for_README/code_refactor/try-except-before.png">
